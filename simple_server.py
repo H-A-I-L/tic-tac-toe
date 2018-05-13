@@ -3,6 +3,34 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer, SimpleHTTPRequestHandler
 import os
+import sys
+import json
+import logging
+
+# The logger is used to log the results to a file in a thread safe environment.
+# Use the log() function to log anything
+# When wrting to file is needed use the `print_to_file` parameter
+LOGGER = logging.getLogger("Server")
+FILE_OUT_LOGGER = logging.getLogger("File")
+streamformatter = logging.Formatter(fmt= "\033[33m%(asctime)s:\033[32m%(name)s:\033[34;1m%(levelname)s \033[0m%(message)s")
+fileformatter = logging.Formatter(fmt= "%(message)s")
+streamHandler = logging.StreamHandler(sys.stdout)
+streamHandler.setFormatter(streamformatter)
+streamHandler.setLevel(logging.INFO)
+fileHandler = logging.FileHandler("results.out")
+fileHandler.setFormatter(fileformatter)
+fileHandler.setLevel(logging.INFO)
+LOGGER.handlers = []
+FILE_OUT_LOGGER.handlers = []
+LOGGER.addHandler(streamHandler)
+FILE_OUT_LOGGER.addHandler(fileHandler)
+LOGGER.setLevel(logging.DEBUG)
+FILE_OUT_LOGGER.setLevel(logging.DEBUG)
+
+def log(message, level=logging.INFO, print_to_file = False):
+    LOGGER.log(level, message)
+    if print_to_file:
+        FILE_OUT_LOGGER.log(level, message)
 
 class Handler(SimpleHTTPRequestHandler):
     
@@ -21,6 +49,14 @@ class Handler(SimpleHTTPRequestHandler):
             message =  threading.currentThread().getName()
             self.wfile.write(message.encode('utf-8'))
             self.wfile.write('\n'.encode('utf-8'))
+
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = json.loads(self.rfile.read(content_length))
+        log("Recieved data:")
+        log("---", print_to_file=True)
+        self.send_response(200)
+        self.end_headers()
 
     # This was copied from the SimpleHTTPRequestHandler source code of cpython
     def send_head(self):
@@ -51,6 +87,7 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             f = open(path, 'rb')
         except IOError:
+            #instead of raising an exception, return None
             return None
         try:
             self.send_response(200)
@@ -70,5 +107,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == '__main__':
     server = ThreadedHTTPServer(('localhost', 8080), Handler)
-    print('Starting server, use <Ctrl-C> to stop')
+    log('Starting server, use <Ctrl-C> to stop')
+    log('Server running on: localhost:8080')
     server.serve_forever()
+    

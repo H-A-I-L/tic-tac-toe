@@ -160,7 +160,15 @@
 		     color = "btn-danger";
 		 }
 		 $("#message").append("We have a winner: Player "+judge_out+" <div class='btn centered "+color+" disabled'></div>");
-
+		 $.ajax({
+		     type: "POST",
+		     dataType: 'json',
+		     url: "register_result",
+		     data: JSON.stringify({"grid":grid, "winner":judge_out}),
+		     success: function(r){
+			 console.log("Sent result successfully");
+		     }
+		 });
 		 //no more playing
 		 $("td").addClass("disabled");
 
@@ -211,12 +219,6 @@
 	 td {
 	     height: 100px;
 	     width: 100px;
-	 }
-
-	 .center-table
-	 {
-	     margin: 0 auto !important;
-	     float: none !important;
 	 }
 
 	 #message{
