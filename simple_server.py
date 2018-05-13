@@ -54,7 +54,7 @@ class Handler(SimpleHTTPRequestHandler):
         content_length = int(self.headers['Content-Length'])
         post_data = json.loads(self.rfile.read(content_length))
         log("Recieved data:")
-        log("---", print_to_file=True)
+        log(",".join([str(i) for i in post_data['grid']+[post_data['winner']]]), print_to_file=True)
         self.send_response(200)
         self.end_headers()
 

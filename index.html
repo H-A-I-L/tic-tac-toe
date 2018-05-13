@@ -89,8 +89,9 @@
 				 break;
 			     }
 			 }
-			 if(winner != 0)
+			 if(winner != 0){
 			     return winner;
+			 }
 		     }
 		 }
 		 
@@ -105,8 +106,9 @@
 				 break;
 			     }
 			 }
-			 if(winner != 0)
+			 if(winner != 0){
 			     return winner;
+			 }
 		     }
 		 }
 		 //check diagonals
@@ -114,26 +116,28 @@
 		 if(checking_player){
 		     winner = checking_player;
 		     for(i = 4; i < 9; i += 4){
-			 if(grid[i] != currentPlayer){
+			 if(grid[i] != checking_player){
 			     winner = 0;
 			     break;
 			 }
 		     }
-		     if(winner != 0)
+		     if(winner != 0){
 			 return winner;
+		     }
 		 }
 		 
 		 checking_player = grid[2];
 		 if(checking_player){
 		     winner = checking_player;
 		     for(i = 4; i < 8; i += 2){
-			 if(grid[i] != currentPlayer){
+			 if(grid[i] != checking_player){
 			     winner = 0;
 			     break;
 			 }
 		     }
-		     if(winner != 0)
+		     if(winner != 0){
 			 return winner;
+		     }
 		 }
 		 return 0;
 	     }
@@ -160,23 +164,29 @@
 		     color = "btn-danger";
 		 }
 		 $("#message").append("We have a winner: Player "+judge_out+" <div class='btn centered "+color+" disabled'></div>");
-		 $.ajax({
-		     type: "POST",
-		     dataType: 'json',
-		     url: "register_result",
-		     data: JSON.stringify({"grid":grid, "winner":judge_out}),
-		     success: function(r){
-			 console.log("Sent result successfully");
-		     }
-		 });
 		 //no more playing
 		 $("td").addClass("disabled");
 
 		 turn_count = 9;
 	     }
+	     //send current status to server
+	     $.ajax({
+		 type: "POST",
+		 dataType: 'json',
+		 url: "register_result",
+		 data: JSON.stringify({"grid":grid, "winner":judge_out}),
+		 success: function(r){
+		     console.log("Sent result successfully");
+		 }
+	     });
 	     //allow to reset game
-	     if(turn_count == 9)
+	     if(turn_count == 9){
+		 if(judge_out == 0){
+		     $("#message").empty();
+		     $("#message").append("Well, start over!!!");
+		 }
 		 $("#reset").removeAttr("disabled");
+	     }
 	     return grid, currentPlayer;
 	 }
 
