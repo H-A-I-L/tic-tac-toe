@@ -2,6 +2,15 @@ import torch
 
 USE_CUDA = False
 HIDDEN_LAYER_SIZE = 100
+WINNING_COMBINATIONS = [[1,1,1, 0,0,0, 0,0,0],
+                        [0,0,0, 1,1,1, 0,0,0],
+                        [0,0,0, 0,0,0, 1,1,1],
+                        [1,0,0, 1,0,0, 1,0,0],
+                        [0,1,0, 0,1,0, 0,1,0],
+                        [0,0,1, 0,0,1, 0,0,1],
+                        [1,0,0, 0,1,0, 0,0,1],
+                        [0,0,1, 0,1,0, 1,0,0]]
+
 class Model(torch.nn.Module):
     def __init__(self):
         super(Model, self).__init__()
@@ -57,6 +66,15 @@ won? - Returns True if the player indexed by 2 in the grid is a winner, else ret
     if grid[2] == 2 and grid[4] == 2 and grid[6]:
         return True
 
+def judge_batch(grid, winning_combinations):
+    grid_reshaped = grid.view(-1, 1, 3, 3)
+    print(grid_reshaped)
+    out = winning_combinations(grid_reshaped).eq(6)
+    out = out.sum(1).squeeze(2)
+    print(out, "*"*20)
+    return out
+
+    
 def convert_state_to_relative(grid, current_player):
     '''
     Convert the grid relative the current player.
@@ -111,22 +129,24 @@ def inv_convert_state_to_relative(grid, current_player):
 
 def init_grid_batch(batch_size = 20):
     #return [0]*9
-    return (torch.rand(9*batch_size)*2).int().view(-1, 1, 9)
+    return (torch.rand(9*batch_size)*3).int().view(-1, 1, 9)
 
 def main():
     model = Model()
     optimizer = torch.optim.Adam(model.parameters())
+    winning_combinations = torch.nn.Conv2d(1, len(WINNING_COMBINATIONS), kernel_size = 3, stride = 3, bias=False)
+    winning_combinations.weight = torch.nn.Parameter(torch.Tensor(
+        WINNING_COMBINATIONS).view(len(WINNING_COMBINATIONS), 1, 3, 3))
     
     if USE_CUDA and torch.cuda.is_available():
         model.cuda()
         optimizer.cuda()
-
+        
     loss_avg = 0
-    for iteration in range(1000000):
-        grid = init_grid_batch(5)
+    for iteration in range(1):
+        grid = init_grid_batch(20)
         grid_var = torch.autograd.Variable(grid.float())
         x = model(grid_var)
-
         
         max_values, max_indices = x.max(2)
         max_indices = max_indices.unsqueeze(1).data
@@ -145,7 +165,57 @@ def main():
         if iteration%500 == 0:
             print("loss: {:.4f} iteration: {}".format(loss_avg/500, iteration))
             loss_avg = 0
-        
+
+    #Save this model
+    torch.save({"model":model.state_dict()}, "model.out")
+    prev_model_state_dict = model.state_dict()
+    for iteration in range(1):
+        grid = torch.autograd.Variable(init_grid_batch(1).float())
+        current_player = 1
+        loss = None
+        for turn in range(9):
+            prev_model = Model()
+            prev_model.load_state_dict(prev_model_state_dict)
+            grid_for_current_player = convert_state_to_relative(grid, current_player)
+            if current_player == 1:
+                grid_move = model(grid_for_current_player)
+                judgement = judge_batch(grid_move, winning_combinations)
+                # Checking graph 
+                # gf = judgement.grad_fn
+                # while gf is not None:
+                #     print(gf)
+                #     print(gf.__dir__())
+                #     print("*"*20)
+                #     try:
+                #         [print(g[0].next_functions) for g in gf.next_functions]
+                #     except:
+                #         pass
+                #     gf = gf.next_functions[0][0]
+                # return
+                if judgement.squeeze().data[0] == 1: 
+                    loss = judgement
+                    break
+            else:
+                grid_move = prev_model(grid_for_current_player)
+                judgement = judge_batch(grid_move, winning_combinations)
+                if judgement.squeeze().data[0] == 1: 
+                    loss = judgement
+                    break
+            grid = inv_convert_state_to_relative(grid_for_current_player, current_player)
+
+            if current_player == 1:
+                current_player = 2
+            else:
+                current_player = 1
+
+        if loss is not None:
+            model.zero_grad()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        prev_model_state_dict = model.state_dict()
+    torch.save({"model":model.state_dict()}, "model_RL.out")
         
 if __name__ == "__main__":
     main()
