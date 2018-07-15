@@ -9,6 +9,10 @@ import logging
 
 import torch
 
+from models.deep_learning_feed_forward import Model
+from models.deep_learning_feed_forward import convert_state_to_relative
+
+
 # The logger is used to log the results to a file in a thread safe environment.
 # Use the log() function to log anything
 # When wrting to file is needed use the `print_to_file` parameter
@@ -29,6 +33,9 @@ FILE_OUT_LOGGER.addHandler(fileHandler)
 LOGGER.setLevel(logging.DEBUG)
 FILE_OUT_LOGGER.setLevel(logging.DEBUG)
 
+MODEL = Model()
+model_state = torch.load("models/model_RL.out")
+MODEL.load_state_dict(model_state['model'])
 
 
 def log(message, level=logging.INFO, print_to_file = False):
@@ -68,14 +75,39 @@ class Handler(SimpleHTTPRequestHandler):
             content_length = int(self.headers['Content-Length'])
             post_data = json.loads(self.rfile.read(content_length))
 
+            #currentPlayer = post_data["currentPlayer"]
+            result = self._get_result_from_model(post_data['grid'],
+                                                 post_data["currentPlayer"])
+            
             log("giving move: Recived: ".format(post_data['grid']))
-            log("returning : 1,2")
+            log("returning : {}".format(result))
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            message = json.dumps({"x":1, "y":2})
+            message = json.dumps({"idx":result})
             self.wfile.write(message.encode('utf-8'))
 
+
+    def _get_result_from_model(self, grid, currentPlayer):
+        grid = convert_state_to_relative(torch.Tensor(grid), currentPlayer)
+        grid_for_current_player = torch.autograd.Variable(grid).view(1,1,9)
+        grid_score = MODEL(grid_for_current_player)
+
+        sorted_grid_scores, sorted_grid_index =  torch.sort(grid_score, dim = 2,descending = True)
+        sorted_grid_index = sorted_grid_index.squeeze()
+        sorted_grid_scores = sorted_grid_scores.squeeze()
+
+        updated_grid_for_current_player = grid_for_current_player.clone()
+
+        for state in range(9):
+            if grid_for_current_player.squeeze()[sorted_grid_index[state]] != 0:
+                continue
+            candidate_grid = grid_score == sorted_grid_scores[state]
+            updated_grid_for_current_player[candidate_grid] = 2
+            break
+        result = (updated_grid_for_current_player != grid_for_current_player).squeeze().nonzero().item()
+        return result
+            
     # This was copied from the SimpleHTTPRequestHandler source code of cpython
     def send_head(self):
         """Common code for GET and HEAD commands.

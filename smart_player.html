@@ -206,10 +206,10 @@
 		     type: "POST",
 		     dataType: 'json',
 		     url: "get_move",
-		     data: JSON.stringify({"grid":grid}),
+		     data: JSON.stringify({"grid":grid, "currentPlayer":2}),
 		     contentType: "application/json",
 		     success: function(r){
-			 idx = r.x * 3 + r.y;
+			 idx = r.idx;
 			 grid[idx] = currentPlayer;
 			 grid, currentPlayer = next_turn(grid, currentPlayer);
 		     },
