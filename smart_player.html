@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+	<title>Tic-tac-toe: ain't CS awesome</title>
+	<!-- Latest compiled and minified CSS -->
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+	
+	<!-- jQuery library -->
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+	
+	<!-- Popper JS -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
+	
+	<!-- Latest compiled JavaScript -->
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
+
+	<script>
+	 function set_grid(grid, currentPlayer){
+	     for(i = 0; i < grid.length; i++){
+		 y = i%3;
+		 x = Math.floor(i/3);
+		 id = "#"+x+y;
+		 if(grid[i]==1){
+		     $(id).removeClass("btn-warning");
+		     $(id).addClass("btn-success disabled");
+		     $(id).text("X");
+		 }
+		 if(grid[i]==2){
+		     $(id).removeClass("btn-warning");
+		     $(id).addClass("btn-danger disabled");
+		     $(id).text("O");
+		 }
+		 $(id).css({
+		     "padding-top":"20px",
+		     "font-size": "40px"
+		 });
+	     }
+	 }
+	 
+	 var grid = [0,0,0,0,0,0,0,0,0]//[0,1,2,0,0,0,1,1,1];
+	 var currentPlayer = 2;
+	 var turn_count = 0
+
+	 function judge_game(grid){
+	     //this function will return 0 if no player wins, else will return the index of the winning player
+	     var using_method = 2;
+	     //method 1:
+	     if(using_method ==1 ){
+		 //checking  columns
+		 for(i = 0; i < 3; i++){
+		     checking_player = grid[i];
+		     if(grid[i+3] == checking_player && grid[i+6] == checking_player){
+			 return checking_player;
+		     }
+		 }
+		 
+		 //checking rows
+		 for(i = 0; i < 3; i++){
+		     checking_player = grid[i*3];
+		     if(grid[i*3+1] == checking_player && grid[i*3+2] == checking_player){
+			 return checking_player;
+		     }
+		 }
+		 
+		 //check diagonals
+		 checking_player = grid[0];
+		 if(grid[4] == checking_player && grid[8] == checking_player){
+		     return checking_player;
+		 }
+		 
+		 checking_player = grid[2];
+		 if(grid[4] == checking_player && grid[6] == checking_player){
+		     return checking_player;
+		 }
+		 
+		 return 0;
+	     }
+	     
+	     //method 2:
+	     else if(using_method == 2 ){
+		 //checking  columns
+		 for(i = 0; i < 3; i++){
+		     checking_player = grid[i];
+		     if(checking_player){
+			 winner = checking_player;
+			 for(j = i+3; j < 9; j += 3){
+			     if(grid[j] != checking_player){
+				 winner = 0;
+				 break;
+			     }
+			 }
+			 if(winner != 0){
+			     return winner;
+			 }
+		     }
+		 }
+		 
+		 //checking rows
+		 for(i = 0; i < 3; i++){
+		     checking_player = grid[i*3];
+		     if(checking_player){
+			 winner = checking_player;
+			 for(j = i*3+1; j < i*3+3; j++){
+			     if(grid[j] != checking_player){
+				 winner = 0;
+				 break;
+			     }
+			 }
+			 if(winner != 0){
+			     return winner;
+			 }
+		     }
+		 }
+		 //check diagonals
+		 checking_player = grid[0];
+		 if(checking_player){
+		     winner = checking_player;
+		     for(i = 4; i < 9; i += 4){
+			 if(grid[i] != checking_player){
+			     winner = 0;
+			     break;
+			 }
+		     }
+		     if(winner != 0){
+			 return winner;
+		     }
+		 }
+		 
+		 checking_player = grid[2];
+		 if(checking_player){
+		     winner = checking_player;
+		     for(i = 4; i < 8; i += 2){
+			 if(grid[i] != checking_player){
+			     winner = 0;
+			     break;
+			 }
+		     }
+		     if(winner != 0){
+			 return winner;
+		     }
+		 }
+		 return 0;
+	     }
+	 }
+	 
+	 function next_turn(grid, currentPlayer){
+	     set_grid(grid, currentPlayer);
+	     $("#message").empty();
+	     judge_out = judge_game(grid);
+	     
+	     if(judge_out == 0){
+		 if(currentPlayer == 1){
+		     currentPlayer = 2;
+		     color = "btn-danger";
+		 }else{
+		     currentPlayer = 1;
+		     color = "btn-success";
+		 }
+		 $("#message").append("Turn: Player "+currentPlayer+" <div class='btn "+color+" disabled'></div>");
+	     }else{
+		 if(judge_out == 1){
+		     color = "btn-success";
+		 }else{
+		     color = "btn-danger";
+		 }
+		 $("#message").append("We have a winner: Player "+judge_out+" <div class='btn centered "+color+" disabled'></div>");
+		 //no more playing
+		 $("td").addClass("disabled");
+
+		 turn_count = 9;
+	     }
+	     //send current status to server
+	     $.ajax({
+		 type: "POST",
+		 dataType: 'json',
+		 url: "register_result",
+		 data: JSON.stringify({"grid":grid, "winner":judge_out}),
+		 success: function(r){
+		     console.log("Sent result successfully");
+		 }
+	     });
+	     //allow to reset game
+	     if(turn_count == 9){
+		 if(judge_out == 0){
+		     $("#message").empty();
+		     $("#message").append("Well, start over!!!");
+		 }
+		 $("#reset").removeAttr("disabled");
+	     }
+	     return grid, currentPlayer;
+	 }
+
+	 function click_cell(e){
+	     //change this to adding the attribute, or use checking class
+	     //if(!$(this).is(':disabled')){
+	     if(!$(this).hasClass("disabled")){
+		 turn_count++;
+		 elementes = this.id.split("");
+		 x = parseInt(elementes[0]);
+		 y = parseInt(elementes[1]);
+		 idx = x*3 + y;
+		 grid[idx] = currentPlayer;
+		 //grid, currentPlayer = next_turn(grid, currentPlayer);
+		 
+		 set_grid(grid, currentPlayer);
+		 $("#message").empty();
+		 judge_out = judge_game(grid);
+
+		 if(judge_out == 0){
+		     $("#message").append("Turn: Computer <div class='btn btn-danger disabled'></div>");
+		 }else{
+		     if(judge_out == 1){
+			 $("#message").append("We have a winner: The player <div class='btn centered btn-sucess disabled'></div>");
+			 //no more playing
+			 $("td").addClass("disabled");
+			 turn_count = 9;
+		     }
+		     else{
+			 $("#message").append("ERROR: computer won!!! this shouldn't happen at this jucture");
+		     }
+		 }
+		 //allow to reset game
+		 if(turn_count == 9){
+		     if(judge_out == 0){
+			 $("#message").empty();
+			 $("#message").append("Well, start over!!!");
+		     }
+		     $("#reset").removeAttr("disabled");
+		 }
+		 
+	     }
+	 }
+
+	 function refresh_page(e){
+	     location.reload()
+	 }
+	 
+	 $(document).ready(function(){
+	     $("td").addClass("btn btn-warning");
+	     grid, currentPlayer = next_turn(grid, currentPlayer)
+	     //$("td").addClass("btn-warning");
+	     //$("td").addClass("btn-block");
+	     
+	     $("td").on("click",click_cell);
+	     $("#reset").on("click", refresh_page);
+	 });
+	</script>
+	
+	<style type="text/css" media="screen">
+	 .table {
+	     border-radius: 5px;
+	     width: 302px;
+	     margin: 0px auto;
+	     float: none;
+	 }
+	 td {
+	     height: 100px;
+	     width: 100px;
+	 }
+
+	 #message{
+	     height:28px;
+	     margin:15px;
+	 }
+	</style>
+    </head>
+    <body>
+	<div class="container-fluid" style="width:50%">
+	    <nav class="navbar navbar-expand-sm bg-dark navbar-dark">
+		<div class="navbar-header">
+		    <div class="navbar-brand">Tic-tac-toe</div>
+		</div>
+		<button id="reset" class="btn btn-danger navbar-btn btn-sm" disabled="disabled">Reset game</button>
+	    </nav>
+	    
+	    <div class="row">
+		<div class="col-xs-12 col-sm-12 col-md-12 centered">
+		    <div id="message" class="text-center"></div>
+		</div>
+	    </div>
+	    <div class="row">
+		<div class="col-xs-12 col-sm-12 col-md-12 centered">
+		    <table class="table table-bordered centered-table">
+			<tbody>
+			    <tr>
+				<td id="00">
+				</td>
+				<td id="01">
+				</td>
+				<td id="02">
+				</td>
+			    </tr>
+			    <tr>
+				<td id="10">
+				</td>
+				<td id="11">
+				</td>
+				<td id="12">
+				</td>
+			    </tr>
+			    <tr>
+				<td id="20">
+				</td>
+				<td id="21">
+				</td>
+				<td id="22">
+				</td>
+			    </tr>
+			</tbody>
+		    </table>
+		</div>    
+	    </div>
+	</div>
+    </body>
+</html>
