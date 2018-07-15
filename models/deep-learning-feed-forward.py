@@ -39,7 +39,7 @@ class Model(torch.nn.Module):
         x = torch.nn.functional.relu(x, inplace = True)
         x = self.output_layer(x)
         x = self.bn3(x)
-        x = torch.nn.functional.softmax(x)
+        x = torch.nn.functional.softmax(x, dim=2)
         return x
 
 def judge(grid):
@@ -67,11 +67,17 @@ won? - Returns True if the player indexed by 2 in the grid is a winner, else ret
         return True
 
 def judge_batch(grid, winning_combinations):
+    '''
+    Produces a result based on the winning_combinations.
+    If the current player (indexed by `2` in the `grid`) has made a winning combinations, 
+    return 1 for that grid
+    input:
+    grid - a batch of game states
+    winning_combinations - a nn.Conv2d object with weights set to the winning combinations
+    '''
     grid_reshaped = grid.view(-1, 1, 3, 3)
-    print(grid_reshaped)
     out = winning_combinations(grid_reshaped).eq(6)
-    out = out.sum(1).squeeze(2)
-    print(out, "*"*20)
+    out = out.sum(1).squeeze(2) > 0
     return out
 
     
@@ -137,84 +143,163 @@ def main():
     winning_combinations = torch.nn.Conv2d(1, len(WINNING_COMBINATIONS), kernel_size = 3, stride = 3, bias=False)
     winning_combinations.weight = torch.nn.Parameter(torch.Tensor(
         WINNING_COMBINATIONS).view(len(WINNING_COMBINATIONS), 1, 3, 3))
-    
+    winning_combinations.requires_grad = False
     if USE_CUDA and torch.cuda.is_available():
         model.cuda()
         optimizer.cuda()
+        winning_combinations.cuda()
         
     loss_avg = 0
-    for iteration in range(1):
+    # This loop trains the model to predict valid states
+    for iteration in range(5000):
+        # Create a batch of different states the board can be in
         grid = init_grid_batch(20)
         grid_var = torch.autograd.Variable(grid.float())
+        if USE_CUDA:
+            grid_var = grid_var.cuda()
+
+        # Use model to obtain proposed moves
         x = model(grid_var)
-        
+
+        # Get the move proposed by the model (The position with the highest probability)
         max_values, max_indices = x.max(2)
         max_indices = max_indices.unsqueeze(1).data
 
-        #print(grid.gather(2, max_indices), grid.gather(2, max_indices) == 0, grid)
-        #if the predicted position has a non-zero value in the grid, incur a loss,
-        #also maximize the probability of predicting position that is non-zero in grid
+        # if the predicted position has a non-zero value (not empty) in the grid,
+        # incur a loss, also maximize the probability of predicting position
+        # that is non-zero in grid
         target = torch.autograd.Variable(grid.gather(2, max_indices) == 0).float().squeeze()
+        if USE_CUDA:
+            target = target.cuda()
         loss = target - max_values.squeeze()
         loss = loss.pow(2).sum()/grid.size(0)
         model.zero_grad()
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        loss_avg += loss.data[0]
+
+        # logging the loss information
+        loss_avg += loss.item()
         if iteration%500 == 0:
             print("loss: {:.4f} iteration: {}".format(loss_avg/500, iteration))
             loss_avg = 0
 
+            
     #Save this model
     torch.save({"model":model.state_dict()}, "model.out")
     prev_model_state_dict = model.state_dict()
-    for iteration in range(1):
-        grid = torch.autograd.Variable(init_grid_batch(1).float())
+
+    # This loop will train the model to propose moves that will result in a win
+    # We'll be trying to maximise the winning chances of player 1
+    loss_avg = 0
+    loss_count = 0
+    player_1_win_count = 0
+    player_2_win_count = 0
+    for iteration in range(5000):
+        # Each iteration initialize the game with a random state.
+        while True:
+            grid = torch.autograd.Variable(init_grid_batch(1).float())
+            if USE_CUDA:
+                grid = grid.cuda()
+            if judge_batch(grid, winning_combinations).squeeze().item() != 1 and \
+               judge_batch(
+                   convert_state_to_relative(grid, 1),
+                   winning_combinations).squeeze().item() != 1:
+                break
         current_player = 1
         loss = None
+        
+        # As there can be a maximum of 9 turns, we'll loop 9 times, and break if the game ends
         for turn in range(9):
+            if iteration%500 == 0:
+                print("player {}:".format(current_player))
+                print(grid.view(3,3))
+
+            # Initialize the opponent with the model from the previous iteration
+            # TODO: select from a pool of previous models
             prev_model = Model()
             prev_model.load_state_dict(prev_model_state_dict)
             grid_for_current_player = convert_state_to_relative(grid, current_player)
-            if current_player == 1:
-                grid_move = model(grid_for_current_player)
-                judgement = judge_batch(grid_move, winning_combinations)
-                # Checking graph 
-                # gf = judgement.grad_fn
-                # while gf is not None:
-                #     print(gf)
-                #     print(gf.__dir__())
-                #     print("*"*20)
-                #     try:
-                #         [print(g[0].next_functions) for g in gf.next_functions]
-                #     except:
-                #         pass
-                #     gf = gf.next_functions[0][0]
-                # return
-                if judgement.squeeze().data[0] == 1: 
-                    loss = judgement
-                    break
-            else:
-                grid_move = prev_model(grid_for_current_player)
-                judgement = judge_batch(grid_move, winning_combinations)
-                if judgement.squeeze().data[0] == 1: 
-                    loss = judgement
-                    break
-            grid = inv_convert_state_to_relative(grid_for_current_player, current_player)
 
+            # The current player makes his move
+            if current_player == 1:
+                grid_score = model(grid_for_current_player)
+                model_out = grid_score
+            else:
+                grid_score = prev_model(grid_for_current_player)
+                #todo: check i valid, else move to next most probabale
+            sorted_grid_scores, sorted_grid_index =  torch.sort(grid_score, dim = 2,descending = True)
+            sorted_grid_index = sorted_grid_index.squeeze()
+            sorted_grid_scores = sorted_grid_scores.squeeze()
+
+            # var to store the grid after a move
+            updated_grid_for_current_player = grid_for_current_player.clone()
+
+            # Even when trained to predict valid moves, it is possible the proposed move is invlid
+            # Hence, this work around.
+            # TODO: incur a loss here?
+            for state in range(9):
+                if grid_for_current_player.squeeze()[sorted_grid_index[state]] != 0:
+                    continue
+                candidate_grid = grid_score == sorted_grid_scores[state]
+                updated_grid_for_current_player[candidate_grid] = 2
+                break
+
+            # Thou shall be judged now
+            judgement = judge_batch(updated_grid_for_current_player, winning_combinations)
+
+            # If the judgement says the current player wins,
+            # decide on the loss and terminate this round
+            if judgement.squeeze().item() == 1:
+                if iteration%500 == 0:
+                    print("Winning move for player {}:".format(current_player))
+                    print(inv_convert_state_to_relative(updated_grid_for_current_player,
+                                                        current_player).view(3,3))
+                judgement = judgement.float()
+                if current_player == 2:
+                    loss = torch.sum(judgement*model_out)
+                else:
+                    loss = torch.sum((-judgement)*model_out)
+                break
+
+            grid_for_current_player = updated_grid_for_current_player
+            # If no one won, the game shall go on
+            grid = inv_convert_state_to_relative(grid_for_current_player, current_player)
             if current_player == 1:
                 current_player = 2
             else:
                 current_player = 1
 
+        # Store the previous model
+        prev_model_state_dict = model.state_dict()
+
+        
         if loss is not None:
+            loss_avg += loss.item()
+            loss_count += 1
+            if iteration%500 == 0:
+                print("loss:", loss_avg/loss_count,
+                      "  count:", loss_count,
+                      "  iteration: ", iteration)
+                loss_avg = 0
+                loss_count = 0
             model.zero_grad()
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-        prev_model_state_dict = model.state_dict()
+            if current_player == 1:
+                player_1_win_count += 1
+            else:
+                player_2_win_count += 1
+
+        if iteration%500 == 0:
+            print("  Winning ratio (500 rounds): p1: {:.4f}   p2: {:.4f}"
+              .format(player_1_win_count/500,
+                      player_2_win_count/500))
+            player_1_win_count = 0
+            player_2_win_count = 0
+        
     torch.save({"model":model.state_dict()}, "model_RL.out")
         
 if __name__ == "__main__":
