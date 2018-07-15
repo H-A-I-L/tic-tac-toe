@@ -1,6 +1,6 @@
 import torch
 
-USE_CUDA = False
+USE_CUDA = True
 HIDDEN_LAYER_SIZE = 100
 WINNING_COMBINATIONS = [[1,1,1, 0,0,0, 0,0,0],
                         [0,0,0, 1,1,1, 0,0,0],
@@ -146,7 +146,6 @@ def main():
     winning_combinations.requires_grad = False
     if USE_CUDA and torch.cuda.is_available():
         model.cuda()
-        optimizer.cuda()
         winning_combinations.cuda()
         
     loss_avg = 0
@@ -157,7 +156,7 @@ def main():
         grid_var = torch.autograd.Variable(grid.float())
         if USE_CUDA:
             grid_var = grid_var.cuda()
-
+            
         # Use model to obtain proposed moves
         x = model(grid_var)
 
@@ -168,7 +167,7 @@ def main():
         # if the predicted position has a non-zero value (not empty) in the grid,
         # incur a loss, also maximize the probability of predicting position
         # that is non-zero in grid
-        target = torch.autograd.Variable(grid.gather(2, max_indices) == 0).float().squeeze()
+        target = torch.autograd.Variable(grid_var.gather(2, max_indices) == 0).float().squeeze()
         if USE_CUDA:
             target = target.cuda()
         loss = target - max_values.squeeze()
@@ -195,6 +194,11 @@ def main():
     loss_count = 0
     player_1_win_count = 0
     player_2_win_count = 0
+
+    prev_model = Model()
+    if USE_CUDA:
+        prev_model.cuda()
+
     for iteration in range(5000):
         # Each iteration initialize the game with a random state.
         while True:
@@ -217,7 +221,6 @@ def main():
 
             # Initialize the opponent with the model from the previous iteration
             # TODO: select from a pool of previous models
-            prev_model = Model()
             prev_model.load_state_dict(prev_model_state_dict)
             grid_for_current_player = convert_state_to_relative(grid, current_player)
 
