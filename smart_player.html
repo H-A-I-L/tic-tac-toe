@@ -200,34 +200,23 @@
 		 y = parseInt(elementes[1]);
 		 idx = x*3 + y;
 		 grid[idx] = currentPlayer;
-		 //grid, currentPlayer = next_turn(grid, currentPlayer);
-		 
-		 set_grid(grid, currentPlayer);
-		 $("#message").empty();
-		 judge_out = judge_game(grid);
+		 grid, currentPlayer = next_turn(grid, currentPlayer);
 
-		 if(judge_out == 0){
-		     $("#message").append("Turn: Computer <div class='btn btn-danger disabled'></div>");
-		 }else{
-		     if(judge_out == 1){
-			 $("#message").append("We have a winner: The player <div class='btn centered btn-sucess disabled'></div>");
-			 //no more playing
-			 $("td").addClass("disabled");
-			 turn_count = 9;
+		 $.ajax({
+		     type: "POST",
+		     dataType: 'json',
+		     url: "get_move",
+		     data: JSON.stringify({"grid":grid}),
+		     contentType: "application/json",
+		     success: function(r){
+			 idx = r.x * 3 + r.y;
+			 grid[idx] = currentPlayer;
+			 grid, currentPlayer = next_turn(grid, currentPlayer);
+		     },
+		     error: function (xhr) {// When Service call fails
+			 console.log("Error: " + xhr.responseText);
 		     }
-		     else{
-			 $("#message").append("ERROR: computer won!!! this shouldn't happen at this jucture");
-		     }
-		 }
-		 //allow to reset game
-		 if(turn_count == 9){
-		     if(judge_out == 0){
-			 $("#message").empty();
-			 $("#message").append("Well, start over!!!");
-		     }
-		     $("#reset").removeAttr("disabled");
-		 }
-		 
+		 });
 	     }
 	 }
 

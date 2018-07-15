@@ -7,6 +7,8 @@ import sys
 import json
 import logging
 
+import torch
+
 # The logger is used to log the results to a file in a thread safe environment.
 # Use the log() function to log anything
 # When wrting to file is needed use the `print_to_file` parameter
@@ -26,6 +28,8 @@ LOGGER.addHandler(streamHandler)
 FILE_OUT_LOGGER.addHandler(fileHandler)
 LOGGER.setLevel(logging.DEBUG)
 FILE_OUT_LOGGER.setLevel(logging.DEBUG)
+
+
 
 def log(message, level=logging.INFO, print_to_file = False):
     LOGGER.log(level, message)
@@ -51,12 +55,26 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write('\n'.encode('utf-8'))
 
     def do_POST(self):
-        content_length = int(self.headers['Content-Length'])
-        post_data = json.loads(self.rfile.read(content_length))
-        log("Recieved data:")
-        log(",".join([str(i) for i in post_data['grid']+[post_data['winner']]]), print_to_file=True)
-        self.send_response(200)
-        self.end_headers()
+        if self.path.endswith("register_result"):
+            content_length = int(self.headers['Content-Length'])
+            post_data = json.loads(self.rfile.read(content_length))
+            log("Recieved data:")
+            log(",".join([str(i) for i in post_data['grid']+[post_data['winner']]]), print_to_file=False)
+            self.send_response(200)
+            self.end_headers()
+            
+            
+        elif self.path.endswith("get_move"):
+            content_length = int(self.headers['Content-Length'])
+            post_data = json.loads(self.rfile.read(content_length))
+
+            log("giving move: Recived: ".format(post_data['grid']))
+            log("returning : 1,2")
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            message = json.dumps({"x":1, "y":2})
+            self.wfile.write(message.encode('utf-8'))
 
     # This was copied from the SimpleHTTPRequestHandler source code of cpython
     def send_head(self):
