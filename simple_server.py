@@ -7,11 +7,6 @@ import sys
 import json
 import logging
 
-import torch
-
-from models.deep_learning_feed_forward import Model
-from models.deep_learning_feed_forward import convert_state_to_relative
-
 
 # The logger is used to log the results to a file in a thread safe environment.
 # Use the log() function to log anything
@@ -33,20 +28,51 @@ FILE_OUT_LOGGER.addHandler(fileHandler)
 LOGGER.setLevel(logging.DEBUG)
 FILE_OUT_LOGGER.setLevel(logging.DEBUG)
 
-MODEL = Model()
-model_state = torch.load("models/model_RL.out")
-MODEL.load_state_dict(model_state['model'])
-
-
 def log(message, level=logging.INFO, print_to_file = False):
     LOGGER.log(level, message)
     if print_to_file:
         FILE_OUT_LOGGER.log(level, message)
 
+
+try:
+    import torch
+    have_smart_player = True
+    have_torch = True
+    from models.deep_learning_feed_forward import Model
+    from models.deep_learning_feed_forward import convert_state_to_relative
+    log("pytorch is available")
+except ImportError:
+    have_smart_player = False
+    have_torch = False
+    log("pytorch not available, not loading smart_player")
+
+if have_smart_player:
+    MODEL = Model()
+    try:
+        model_state = torch.load("models/model_RL.out")
+        MODEL.load_state_dict(model_state['model'])
+    except FileNotFoundError:
+        log("The model has not been trined, execute deep_learning_feed_forward.py script")
+        log("Launching without smart_player")
+        have_smart_player = False
+
+
+
 class Handler(SimpleHTTPRequestHandler):
     
     def do_GET(self):
         # This section was copied from the SimpleHTTPRequestHandler source of cpython
+        if "smart_player.html" in self.path and not have_smart_player:
+            self.send_response(200)
+            self.send_header("Content-type", "html")
+            self.end_headers()
+            if not have_torch:
+                message =  "You don't have pytorch installed go to pytorch.org for instructions on how to install pytorch."
+            else:
+                message =  "You don't have a trained model. Execute the deep_learning_feed_forward.py script."
+            self.wfile.write(message.encode('utf-8'))
+            self.wfile.write('\n'.encode('utf-8'))
+            return
         f = self.send_head()
         if f:
             try:
@@ -57,7 +83,7 @@ class Handler(SimpleHTTPRequestHandler):
             # handle other requests here 
             self.send_response(200)
             self.end_headers()
-            message =  threading.currentThread().getName()
+            message =  "Oopts, what are you trying to do mate!"
             self.wfile.write(message.encode('utf-8'))
             self.wfile.write('\n'.encode('utf-8'))
 
@@ -72,6 +98,17 @@ class Handler(SimpleHTTPRequestHandler):
             
             
         elif self.path.endswith("get_move"):
+            if not have_smart_player:
+                self.send_response(200)
+                self.send_header("Content-type", "html")
+                self.end_headers()
+                if not have_torch:
+                    message =  "You don't have pytorch installed go to pytorch.org for instructions on how to install pytorch."
+                else:
+                    message =  "You don't have a trained model. Execute the deep_learning_feed_forward.py script."
+                self.wfile.write(message.encode('utf-8'))
+                self.wfile.write('\n'.encode('utf-8'))
+                return
             content_length = int(self.headers['Content-Length'])
             post_data = json.loads(self.rfile.read(content_length))
 
