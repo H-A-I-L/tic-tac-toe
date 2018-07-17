@@ -1,4 +1,9 @@
 import torch
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--cuda", help="Pass this option if you want to run the model with cuda enabled. Note that the model will not run if pytorch fails to recognize a cuda enabled device.", action='store_true')
+parser.add_argument("-i","--iterations", help="The number of iterations to train each phase. (Default is 20000)", type=int, default=20000)
 
 USE_CUDA = True
 HIDDEN_LAYER_SIZE = 100
@@ -138,19 +143,27 @@ def init_grid_batch(batch_size = 20):
     return (torch.rand(9*batch_size)*3).int().view(-1, 1, 9)
 
 def main():
+    args = parser.parse_args()
+    if not torch.cuda.is_available() or not args.cuda:
+        USE_CUDA = False
+
+    iterations = args.iterations
+    
     model = Model()
     optimizer = torch.optim.Adam(model.parameters())
+
+    # Converting the winning combinations into a convolusional layer.
     winning_combinations = torch.nn.Conv2d(1, len(WINNING_COMBINATIONS), kernel_size = 3, stride = 3, bias=False)
     winning_combinations.weight = torch.nn.Parameter(torch.Tensor(
         WINNING_COMBINATIONS).view(len(WINNING_COMBINATIONS), 1, 3, 3))
     winning_combinations.requires_grad = False
-    if USE_CUDA and torch.cuda.is_available():
+    if USE_CUDA:
         model.cuda()
         winning_combinations.cuda()
         
     loss_avg = 0
     # This loop trains the model to predict valid states
-    for iteration in range(5000):
+    for iteration in range(iterations):
         # Create a batch of different states the board can be in
         grid = init_grid_batch(20)
         grid_var = torch.autograd.Variable(grid.float())
@@ -167,7 +180,7 @@ def main():
         # if the predicted position has a non-zero value (not empty) in the grid,
         # incur a loss, also maximize the probability of predicting position
         # that is non-zero in grid
-        target = torch.autograd.Variable(grid_var.gather(2, max_indices) == 0).float().squeeze()
+        target = torch.autograd.Variable(torch.gather(grid_var,2, max_indices) == 0).float().squeeze()
         if USE_CUDA:
             target = target.cuda()
         loss = target - max_values.squeeze()
@@ -199,7 +212,7 @@ def main():
     if USE_CUDA:
         prev_model.cuda()
 
-    for iteration in range(5000):
+    for iteration in range(iterations):
         # Each iteration initialize the game with a random state.
         while True:
             grid = torch.autograd.Variable(init_grid_batch(1).float())
