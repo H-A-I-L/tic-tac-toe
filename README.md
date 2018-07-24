@@ -1,17 +1,18 @@
-# Playing Tic-Tac-Toe with neural network
-A simple demonstration of training a neural network model to play tic-tac-toe.
+# A simple demonstration to train a DL model to play tic-tac-toe
 
-## Usage
 - To run the server:
-
-``` bash
+  - Execute the simple_server.py
+```sh
 python3 simple_server.py
 ```
+  - *Note*: If pytorch is installed and a model has been trained, the script will automatically load the model and you can play the game against the model by navigating to smart_player.html
 
 - To train the model:
-  - Install [pytorch](http://www.pytorch.org).
-  - Execute the <code>models/deep_learning_feed_forward.py</code> script.
-
-``` bash
-python3 models/deep_learning_feed_forward.py
+  - Install pytorch [pytorch](http://www.pytorch.org)
+  - Run the traning script:
+```sh
+python3 models/deep_learning_feed_forward.py --cuda -i 20000
 ```
+  - Pass arguments as you see fit
+
+Read here for more details: [Teaching a computer to play Tic-Tac-Toe.](https://ahmed-shariff.github.io/2018/07/17/tic-tac-toe/)
